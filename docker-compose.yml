@@ -1,0 +1,50 @@
+# docker-compose.yml
+version: '3.8'
+
+services:
+  web:
+    build: ./web-app
+    ports:
+      - "5000:5000"
+    volumes:
+      - shared_volume:/app/data
+      - ./common:/app/common
+    environment:
+      - PYTHONPATH=/app:/app/common
+      - DB_URL=postgresql://user:pass@db/mydb
+      - ML_SERVICE_URL=http://ml:5001/process
+    depends_on:
+      db:
+        condition: service_healthy
+      ml:
+        condition: service_started
+
+  ml:
+    build: ./machine-learning-client
+    volumes:
+      - shared_volume:/app/data
+      - ./common:/app/common
+    environment:
+      - PYTHONPATH=/app:/app/common
+      - DB_URL=postgresql://user:pass@db/mydb
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: pass
+      POSTGRES_DB: mydb
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U user -d mydb" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pg_data:
+  shared_volume:

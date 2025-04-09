@@ -1,0 +1,38 @@
+<!-- web/templates/index.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Voice Demo</title>
+</head>
+<body>
+    <h1>Mock Voice Input</h1>
+    <textarea id="text-input" placeholder="Enter text to simulate voice input"></textarea>
+    <button onclick="uploadText()">Upload</button>
+
+    <h2>Results</h2>
+    <div id="results"></div>
+
+    <script>
+        async function uploadText() {
+            const text = document.getElementById('text-input').value;
+            await fetch('/upload', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: `text=${encodeURIComponent(text)}`
+            });
+            setTimeout(updateResults, 1000);  // Wait for processing
+        }
+
+        async function updateResults() {
+            const response = await fetch('/results');
+            const data = await response.json();
+            document.getElementById('results').innerHTML = data
+                .map(item => `<p>${item.time}: ${item.text}</p>`)
+                .join('');
+        }
+
+        // Auto-refresh every 5 seconds
+        setInterval(updateResults, 5000);
+    </script>
+</body>
+</html>
