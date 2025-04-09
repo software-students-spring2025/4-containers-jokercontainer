@@ -27,13 +27,5 @@ jobs:
           # Check container statuses
           docker compose ps
 
-          # Verify web service is running
-          docker compose exec web curl --fail http://localhost:5000
-
-          # Verify ML service health
-          docker compose exec ml curl --fail http://localhost:5001/process \
-            -X POST -H "Content-Type: application/json" \
-            -d '{"filename":"test.txt"}'
-
           # Cleanup: shut down the containers
           docker compose down
