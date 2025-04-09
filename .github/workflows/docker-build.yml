@@ -1,0 +1,43 @@
+name: Docker Build Verification
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  verify-docker:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Compose
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y docker-compose-plugin
+
+    - name: Build containers
+      run: docker compose -f docker-compose.yml build
+
+    - name: Start services and verify
+      run: |
+        # Start containers in background
+        docker compose -f docker-compose.yml up -d
+        
+        # Wait for services to initialize
+        sleep 15
+        
+        # Check container statuses
+        docker compose ps
+        
+        # Verify web service is running
+        docker compose exec web curl --fail http://localhost:5000
+        
+        # Verify ML service health
+        docker compose exec ml curl --fail http://localhost:5001/process -X POST -H "Content-Type: application/json" -d '{"filename":"test.txt"}'
+        
+        # Cleanup
+        docker compose down
