@@ -1,4 +1,3 @@
-# common/models.py
 from sqlalchemy import create_engine, Column, String, DateTime, Integer
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime

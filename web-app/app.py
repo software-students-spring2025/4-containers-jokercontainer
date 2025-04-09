@@ -1,9 +1,7 @@
-# web/app.py
+import os
 from datetime import datetime, time
 from sqlite3 import OperationalError
-
 from flask import Flask, request, render_template, jsonify
-import os
 import requests
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker

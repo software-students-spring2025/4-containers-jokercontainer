@@ -1,9 +1,8 @@
-# ml/ml_app.py
+
+import os
 from datetime import time
 from sqlite3 import OperationalError
-
 from flask import Flask, request, jsonify
-import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from common.models import Base, AudioTranscription
