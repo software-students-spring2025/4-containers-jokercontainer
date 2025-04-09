@@ -1,0 +1,31 @@
+name: Docker Build Verification
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  verify-docker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build containers
+        run: docker compose -f docker-compose.yml build
+
+      - name: Start services and verify
+        run: |
+          # Start containers in background
+          docker compose -f docker-compose.yml up -d
+
+          # Wait for services to initialize
+          sleep 15
+
+          # Check container statuses
+          docker compose ps
+
+          # Cleanup: shut down the containers
+          docker compose down
