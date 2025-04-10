@@ -12,7 +12,7 @@ services:
     environment:
       - PYTHONPATH=/app:/app/common
       - MONGO_URI=mongodb://mongodb:27017/mydb
-      - ML_SERVICE_URL=http://ml:5001/process
+      - ML_SERVICE_URL=http://ml:5001/process_audio
     depends_on:
       mongodb:
         condition: service_healthy
@@ -27,6 +27,7 @@ services:
     environment:
       - PYTHONPATH=/app:/app/common
       - MONGO_URI=mongodb://mongodb:27017/mydb
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
     depends_on:
       mongodb:
         condition: service_healthy
