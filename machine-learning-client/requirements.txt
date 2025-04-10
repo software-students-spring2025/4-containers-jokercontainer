@@ -5,5 +5,15 @@ psycopg2-binary
 pymongo==4.5.0
 Werkzeug==2.2.3
 openai>=1.10.0
-python-dotenv==1.0.0
-requests==2.31.0
+python-dotenv>=1.0.1
+requests>=2.32.3
+browser-use==0.1.40
+pyperclip==1.9.0
+gradio==5.23.1
+json-repair
+langchain_anthropic
+langchain-google-genai==2.0.8
+MainContentExtractor==0.0.4
+asyncio
+
+# This project requires Python 3.11 or higher
