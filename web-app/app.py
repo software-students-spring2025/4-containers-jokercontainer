@@ -1,18 +1,20 @@
 """
-Module for the web application that handles file uploads,
-triggers ML processing, and provides results retrieval.
+Module for the web application that handles audio recording,
+triggers ML translation, and provides results retrieval.
 """
 
 import os
+import uuid
+import base64
 from datetime import datetime
 from time import sleep
 from flask import Flask, request, render_template, jsonify
 import requests
 from pymongo.errors import ConnectionFailure
 from common.models import AudioTranscription
+import tempfile
 
 app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = '/app/data'
 
 
 @app.route('/')
@@ -26,53 +28,137 @@ def index():
     return render_template('index.html')
 
 
-@app.route('/upload', methods=['POST'])
-def upload():
+@app.route('/api/record', methods=['POST'])
+def process_recording():
     """
-        Handle file uploads, save the file, and trigger ML processing.
-
-        Expects form data with a 'text' field. The file is saved with a unique
-        timestamp-based filename, and a POST request is sent to the ML processing service.
-
-        Returns:
-            JSON response indicating that the file is being processed.
+    Process an audio recording from the browser.
+    
+    Receives base64 encoded audio data, saves it to a temporary file,
+    and sends it to the ML service for processing.
+    
+    Returns:
+        JSON response with processing status and chatid
     """
-    text = request.form.get('text')
-    filename = f"audio_{datetime.now().timestamp()}.txt"
-    file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-
-    # Save the file with explicit encoding
-    with open(file_path, 'w', encoding='utf-8') as f:
-        f.write(text)
-
-    # Trigger ML processing
-    ml_service_url = os.getenv('ML_SERVICE_URL')
-    requests.post(ml_service_url, json={'filename': filename})
-
-    return jsonify({'status': 'processing'})
+    # Get JSON data from request
+    data = request.json
+    
+    if not data or 'audio_data' not in data:
+        return jsonify({'error': 'No audio data provided'}), 400
+    
+    # Get or generate chat ID
+    chatid = data.get('chatid') or str(uuid.uuid4())
+    
+    try:
+        # Extract the base64 audio data (remove the data URL prefix if present)
+        base64_audio = data['audio_data']
+        if ',' in base64_audio:
+            base64_audio = base64_audio.split(',', 1)[1]
+        
+        # Decode the base64 data
+        audio_data = base64.b64decode(base64_audio)
+        
+        # Save to a temporary file
+        with tempfile.NamedTemporaryFile(suffix='.webm', delete=False) as temp_file:
+            temp_file_path = temp_file.name
+            temp_file.write(audio_data)
+        
+        # Send the audio file to the ML service
+        try:
+            files = {'audio_file': ('recording.webm', open(temp_file_path, 'rb'), 'audio/webm')}
+            data = {'chatid': chatid}
+            
+            response = requests.post(f"{os.getenv('ML_SERVICE_URL')}/process_audio", files=files, data=data)
+            
+            # Clean up temporary file
+            os.unlink(temp_file_path)
+            
+            # TODO: real processing
+            app.logger.info(f"ML response: {response.text}")
+            
+            # insert the record into the database
+            doc_id = AudioTranscription.create(
+                chatid=chatid,
+                translated_content="received"
+            )
+            app.logger.info(f"Created record, ID: {doc_id}, content: received")
+            
+            return jsonify({
+                'success': True,
+                'message': 'Audio sent to ML service and logged',
+                'chatid': chatid,
+            })
+                
+        except requests.RequestException as e:
+            # Clean up temporary file if request failed
+            if os.path.exists(temp_file_path):
+                os.unlink(temp_file_path)
+                
+            return jsonify({
+                'success': False,
+                'message': f'Error communicating with ML service: {str(e)}',
+                'chatid': chatid
+            }), 500
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error processing audio: {str(e)}',
+            'chatid': chatid
+        }), 500
 
 
 @app.route('/results')
 def results():
     """
-        Retrieve processed transcription results from the database.
+        Retrieve all translation results from the database.
 
         Returns:
-            JSON response containing the filename, transcription text, and creation timestamp for each entry.
+            JSON response containing all translations with their metadata.
     """
     try:
         data = AudioTranscription.find_all()
         results_list = [
             {
-                'filename': item['filename'],
-                'text': item['transcription'],
-                'time': item['created_at'].isoformat() if 'created_at' in item else None
+                'id': str(item['_id']),
+                'chatid': item['chatid'],
+                'translated_content': item['translated_content'],
+                'created_at': item['created_at'].isoformat() if 'created_at' in item else None,
+                'updated_at': item['updated_at'].isoformat() if 'updated_at' in item else None
             }
             for item in data
         ]
         return jsonify(results_list)
     except Exception as e:
         app.logger.error(f"Error fetching results: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/results/<chatid>')
+def chat_results(chatid):
+    """
+        Retrieve translation results for a specific chat.
+
+        Args:
+            chatid: ID of the chat to retrieve translations for
+
+        Returns:
+            JSON response containing all translations for the specified chat.
+    """
+    try:
+        data = AudioTranscription.find_by_chatid(chatid)
+        results_list = [
+            {
+                'id': str(item['_id']),
+                'chatid': item['chatid'],
+                'translated_content': item['translated_content'],
+                'created_at': item['created_at'].isoformat() if 'created_at' in item else None,
+                'updated_at': item['updated_at'].isoformat() if 'updated_at' in item else None
+            }
+            for item in data
+        ]
+        return jsonify(results_list)
+    except Exception as e:
+        app.logger.error(f"Error fetching chat results: {e}")
         return jsonify({'error': str(e)}), 500
 
 

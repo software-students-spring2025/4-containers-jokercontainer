@@ -1,59 +1,180 @@
 """
-Module for processing audio transcription via a Flask web service.
+Module for processing audio recordings and generating translations via a Flask web service.
 """
 
 import os
+import uuid
+import tempfile
 from time import sleep
 from flask import Flask, request, jsonify
+from werkzeug.utils import secure_filename
 from pymongo.errors import ConnectionFailure
 from common.models import AudioTranscription
 
 app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = '/app/data'
+app.config['UPLOAD_FOLDER'] = tempfile.gettempdir()
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
 
 @app.route('/process', methods=['POST'])
 def process():
     """
-        Process a file and store its transcription in the database.
-
-        Expects a JSON payload with a 'filename' key.
+        Legacy endpoint for text processing.
+        Will be deprecated in favor of /process_audio.
 
         Returns:
             JSON response indicating success.
     """
     data = request.get_json()
-    filename = data['filename']
+    text = data.get('text', '')
+    
+    # Use provided chatid or generate a new one
+    chatid = data.get('chatid')
+    if not chatid:
+        chatid = str(uuid.uuid4())
 
-    # Process the file
-    transcription = process_audio(filename)
+    # Process the text
+    translated_content = translate_text(text)
 
     # Save to database
     try:
-        transcript_id = AudioTranscription.create(
-            filename=filename, 
-            transcription=transcription
+        doc_id = AudioTranscription.create(
+            chatid=chatid,
+            translated_content=translated_content
         )
-        return jsonify({'status': 'success', 'id': transcript_id})
+        return jsonify({
+            'status': 'success', 
+            'id': doc_id,
+            'chatid': chatid,
+            'translated_content': translated_content
+        })
     except Exception as e:
         app.logger.error(f"Error saving to database: {e}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
-def process_audio(filename):
+@app.route('/process_audio', methods=['POST'])
+def process_audio():
     """
-    Process the audio file by reading its content and converting it to uppercase.
+        Process audio file and store its transcription in the database.
+
+        Expects a multipart form with:
+        - 'audio_file': The audio file to process
+        - 'chatid': (Optional) ID of the chat this recording belongs to
+
+        Returns:
+            JSON response indicating success and containing the translated content.
+    """
+    # Check if audio file is in the request
+    if 'audio_file' not in request.files:
+        return jsonify({'status': 'error', 'message': 'No audio file provided'}), 400
+        
+    audio_file = request.files['audio_file']
+    
+    # If user submits an empty file
+    if audio_file.filename == '':
+        return jsonify({'status': 'error', 'message': 'Empty audio file provided'}), 400
+    
+    # Use provided chatid or generate a new one
+    chatid = request.form.get('chatid')
+    if not chatid:
+        chatid = str(uuid.uuid4())
+    
+    try:
+        # Save the file temporarily
+        filename = secure_filename(audio_file.filename)
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        audio_file.save(filepath)
+        
+        # Process the audio file - in a real app, this would use speech recognition
+        translated_content = transcribe_audio(filepath)
+        
+        # Clean up the temporary file
+        os.remove(filepath)
+        
+        # Save result to database
+        doc_id = AudioTranscription.create(
+            chatid=chatid,
+            translated_content=translated_content
+        )
+        
+        # Return success response
+        return jsonify({
+            'status': 'success',
+            'id': doc_id,
+            'chatid': chatid,
+            'translated_content': translated_content
+        })
+    
+    except Exception as e:
+        app.logger.error(f"Error processing audio: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+def translate_text(text):
+    """
+    Process text by converting it to uppercase.
+    In a real application, this would be replaced with actual ML processing.
 
     Args:
-        filename (str): The name of the file to process.
+        text (str): The text to process.
 
     Returns:
         str: The processed text in uppercase.
     """
-    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-    with open(filepath, 'r', encoding='utf-8') as f:
-        text = f.read()
+    # Simple example - in a real app, this would use ML models
     return text.upper()
+
+
+def transcribe_audio(file_path):
+    """
+    Transcribe audio file to text.
+    In a real application, this would use speech recognition ML models.
+
+    Args:
+        file_path (str): Path to the audio file.
+
+    Returns:
+        str: Transcribed text from the audio.
+    """
+    # MOCK IMPLEMENTATION
+    # In a real app, this would use speech-to-text ML models like:
+    # - OpenAI Whisper
+    # - Google Speech-to-Text
+    # - Mozilla DeepSpeech
+    # - Hugging Face Transformers (Wav2Vec2, etc.)
+    
+    # For demo purposes, we'll return a mock response
+    return f"[AUDIO TRANSCRIPTION] This is a simulated transcription from audio file {os.path.basename(file_path)}. In a real implementation, we would use speech recognition here."
+
+
+@app.route('/results/<chatid>', methods=['GET'])
+def get_chat_results(chatid):
+    """
+    Get all translations for a specific chat.
+    
+    Args:
+        chatid: ID of the chat to retrieve translations for
+        
+    Returns:
+        JSON response with all translations for the chat
+    """
+    try:
+        translations = AudioTranscription.find_by_chatid(chatid)
+        result = [
+            {
+                'id': str(item['_id']),
+                'chatid': item['chatid'],
+                'translated_content': item['translated_content'],
+                'created_at': item['created_at'].isoformat() if 'created_at' in item else None,
+                'updated_at': item['updated_at'].isoformat() if 'updated_at' in item else None
+            }
+            for item in translations
+        ]
+        return jsonify(result)
+    except Exception as e:
+        app.logger.error(f"Error retrieving chat results: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
 if __name__ == '__main__':

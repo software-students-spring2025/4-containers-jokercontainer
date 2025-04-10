@@ -5,9 +5,10 @@ Module for database models and connection handling with MongoDB.
 import os
 from datetime import datetime
 from typing import Dict, List, Any, Optional
-from pymongo import MongoClient
+from pymongo import MongoClient, ASCENDING, DESCENDING
 from pymongo.database import Database
 from pymongo.collection import Collection
+from bson.objectid import ObjectId
 
 
 class MongoDBConnection:
@@ -54,17 +55,17 @@ class MongoDBConnection:
 
 class AudioTranscription:
     """
-    Model representing audio transcription data with MongoDB storage.
+    Model representing translated content data with MongoDB storage.
     """
-    collection_name = "transcriptions"
+    collection_name = "translations"
 
     @classmethod
     def get_collection(cls) -> Collection:
         """
-        Get the MongoDB collection for audio transcriptions.
+        Get the MongoDB collection for translations.
 
         Returns:
-            Collection object for transcriptions
+            Collection object for translations
         """
         conn = MongoDBConnection()
         return conn.get_collection(cls.collection_name)
@@ -72,57 +73,99 @@ class AudioTranscription:
     @classmethod
     def create_indexes(cls) -> None:
         """
-        Create necessary indexes for the transcriptions collection.
+        Create necessary indexes for the translations collection.
         """
         collection = cls.get_collection()
-        collection.create_index("filename")
+        collection.create_index("chatid")
         collection.create_index("created_at")
+        collection.create_index([("chatid", ASCENDING), ("created_at", DESCENDING)])
 
     @classmethod
-    def create(cls, filename: str, transcription: str) -> str:
+    def create(cls, chatid: str, translated_content: str) -> str:
         """
-        Create a new transcription document in the database.
+        Create a new translation document in the database.
 
         Args:
-            filename: Name of the audio file
-            transcription: Text transcription of the audio
+            chatid: ID of the conversation this translation belongs to
+            translated_content: Translated content from ML
 
         Returns:
             ID of the created document
         """
+        current_time = datetime.now()
         collection = cls.get_collection()
         document = {
-            "filename": filename,
-            "transcription": transcription,
-            "created_at": datetime.now()
+            "chatid": chatid,
+            "translated_content": translated_content,
+            "created_at": current_time,
+            "updated_at": current_time
         }
         result = collection.insert_one(document)
         return str(result.inserted_id)
 
     @classmethod
-    def find_all(cls) -> List[Dict[str, Any]]:
+    def update(cls, doc_id: str, translated_content: str) -> bool:
         """
-        Retrieve all transcription documents from the database.
+        Update an existing translation document.
+
+        Args:
+            doc_id: ID of the document to update
+            translated_content: New translated content
 
         Returns:
-            List of all transcription documents
+            True if update was successful, False otherwise
+        """
+        collection = cls.get_collection()
+        update_data = {
+            "translated_content": translated_content,
+            "updated_at": datetime.now()
+        }
+        
+        result = collection.update_one(
+            {"_id": ObjectId(doc_id)}, 
+            {"$set": update_data}
+        )
+        
+        return result.modified_count > 0
+
+    @classmethod
+    def find_all(cls) -> List[Dict[str, Any]]:
+        """
+        Retrieve all translation documents from the database.
+
+        Returns:
+            List of all translation documents
         """
         collection = cls.get_collection()
         return list(collection.find().sort("created_at", -1))
 
     @classmethod
-    def find_by_filename(cls, filename: str) -> Dict[str, Any]:
+    def find_by_chatid(cls, chatid: str) -> List[Dict[str, Any]]:
         """
-        Find a transcription document by filename.
+        Find all translations for a specific chat.
 
         Args:
-            filename: Name of the file to search for
+            chatid: ID of the chat to search for
 
         Returns:
-            Transcription document or None if not found
+            List of translation documents for the chat
         """
         collection = cls.get_collection()
-        return collection.find_one({"filename": filename})
+        return list(collection.find({"chatid": chatid}).sort("created_at", -1))
+
+    @classmethod
+    def find_by_id(cls, doc_id: str) -> Dict[str, Any]:
+        """
+        Find a translation document by its ID.
+
+        Args:
+            doc_id: ID of the document to search for
+
+        Returns:
+            Translation document or None if not found
+        """
+        collection = cls.get_collection()
+        return collection.find_one({"_id": ObjectId(doc_id)})
 
 
 # Create indexes when module is imported
