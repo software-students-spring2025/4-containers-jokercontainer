@@ -5,16 +5,16 @@ services:
   web:
     build: ./web-app
     ports:
-      - "5000:5000"
+      - "5001:5001"
     volumes:
       - shared_volume:/app/data
       - ./common:/app/common
     environment:
       - PYTHONPATH=/app:/app/common
-      - DB_URL=postgresql://user:pass@db/mydb
+      - MONGO_URI=mongodb://mongodb:27017/mydb
       - ML_SERVICE_URL=http://ml:5001/process
     depends_on:
-      db:
+      mongodb:
         condition: service_healthy
       ml:
         condition: service_started
@@ -26,25 +26,23 @@ services:
       - ./common:/app/common
     environment:
       - PYTHONPATH=/app:/app/common
-      - DB_URL=postgresql://user:pass@db/mydb
+      - MONGO_URI=mongodb://mongodb:27017/mydb
     depends_on:
-      db:
+      mongodb:
         condition: service_healthy
 
-  db:
-    image: postgres:13
-    environment:
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: pass
-      POSTGRES_DB: mydb
+  mongodb:
+    image: mongo:latest
     volumes:
-      - pg_data:/var/lib/postgresql/data
+      - mongo_data:/data/db
+    ports:
+      - "27017:27017"
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U user -d mydb" ]
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 5s
       timeout: 5s
       retries: 5
 
 volumes:
-  pg_data:
+  mongo_data:
   shared_volume:
