@@ -2,37 +2,381 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Voice Demo</title>
+    <title>Voice Recognition Demo</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        button {
+            padding: 10px 16px;
+            margin: 10px 0;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button.recording {
+            background-color: #f44336;
+            animation: pulse 1s infinite;
+        }
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        .recording-timer {
+            margin-left: 10px;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        .chat-container {
+            margin-top: 20px;
+        }
+        .translation-item {
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            background-color: #f9f9f9;
+        }
+        .meta {
+            color: #666;
+            font-size: 0.8em;
+            margin-top: 5px;
+        }
+        .controls {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        #record-status {
+            margin-left: 10px;
+            font-weight: bold;
+        }
+        select {
+            padding: 8px;
+            border-radius: 4px;
+            margin-right: 10px;
+        }
+        .chat-selector {
+            margin: 20px 0;
+            display: flex;
+            align-items: center;
+        }
+        .status-message {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .error {
+            background-color: #ffe6e6;
+            color: #d8000c;
+            border: 1px solid #ffc0c0;
+        }
+        .success {
+            background-color: #e6ffe6;
+            color: #006400;
+            border: 1px solid #c0ffc0;
+        }
+    </style>
 </head>
 <body>
-    <h1>Mock Voice Input</h1>
-    <textarea id="text-input" placeholder="Enter text to simulate voice input"></textarea>
-    <button onclick="uploadText()">Upload</button>
+    <h1>Audio Recording & Transcription</h1>
+    
+    <div class="status-message" id="status-container" style="display: none;"></div>
+    
+    <div class="controls">
+        <button id="record-button">Start Recording</button>
+        <span id="record-status"></span>
+        <span id="timer" class="recording-timer" style="display: none;">00:00</span>
+    </div>
 
-    <h2>Results</h2>
-    <div id="results"></div>
+    <div class="chat-container">
+        <h2>Transcriptions</h2>
+        <div class="chat-selector">
+            <select id="chat-id-select" onchange="loadChatResults()">
+                <option value="">Select a chat</option>
+            </select>
+            <button onclick="loadAllChats()">Load All Chats</button>
+        </div>
+        <div id="results"></div>
+    </div>
 
     <script>
-        async function uploadText() {
-            const text = document.getElementById('text-input').value;
-            await fetch('/upload', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-                body: `text=${encodeURIComponent(text)}`
+        // Variables for recording
+        let mediaRecorder;
+        let audioChunks = [];
+        let isRecording = false;
+        let timerInterval;
+        let recordingStartTime;
+        let currentChatId = null;
+        const MAX_RECORDING_TIME = 30000; // 30 seconds
+        const chatIds = new Set();
+        
+        // Get DOM elements
+        const recordButton = document.getElementById('record-button');
+        const recordStatus = document.getElementById('record-status');
+        const timerDisplay = document.getElementById('timer');
+        const statusContainer = document.getElementById('status-container');
+        
+        // Initialize recorder
+        recordButton.addEventListener('click', toggleRecording);
+        
+        // Function to toggle recording state
+        async function toggleRecording() {
+            if (!isRecording) {
+                // Start recording
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    startRecording(stream);
+                } catch (err) {
+                    showStatus(`Error accessing microphone: ${err.message}`, 'error');
+                    console.error('Error accessing microphone:', err);
+                }
+            } else {
+                // Stop recording
+                stopRecording();
+            }
+        }
+        
+        // Function to start recording
+        function startRecording(stream) {
+            audioChunks = [];
+            mediaRecorder = new MediaRecorder(stream);
+            
+            mediaRecorder.addEventListener('dataavailable', event => {
+                if (event.data.size > 0) {
+                    audioChunks.push(event.data);
+                }
             });
-            setTimeout(updateResults, 1000);  // Wait for processing
+            
+            mediaRecorder.addEventListener('stop', processRecording);
+            
+            // Start the recording
+            mediaRecorder.start();
+            isRecording = true;
+            recordButton.textContent = 'Stop Recording';
+            recordButton.classList.add('recording');
+            recordStatus.textContent = 'Recording...';
+            
+            // Start timer
+            recordingStartTime = Date.now();
+            timerDisplay.style.display = 'inline';
+            updateTimer();
+            timerInterval = setInterval(updateTimer, 1000);
+            
+            // Set a timeout to stop recording after MAX_RECORDING_TIME
+            setTimeout(() => {
+                if (isRecording) {
+                    stopRecording();
+                }
+            }, MAX_RECORDING_TIME);
+        }
+        
+        // Function to stop recording
+        function stopRecording() {
+            if (mediaRecorder && isRecording) {
+                mediaRecorder.stop();
+                isRecording = false;
+                recordButton.textContent = 'Start Recording';
+                recordButton.classList.remove('recording');
+                recordStatus.textContent = 'Processing...';
+                
+                // Stop and reset timer
+                clearInterval(timerInterval);
+                timerDisplay.style.display = 'none';
+                
+                // Stop all audio tracks
+                mediaRecorder.stream.getTracks().forEach(track => track.stop());
+            }
+        }
+        
+        // Function to update the timer display
+        function updateTimer() {
+            const elapsed = Date.now() - recordingStartTime;
+            const seconds = Math.floor(elapsed / 1000);
+            const minutes = Math.floor(seconds / 60);
+            const remainingSeconds = seconds % 60;
+            
+            timerDisplay.textContent = `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+            
+            // Auto-stop recording if it reaches the maximum time
+            if (elapsed >= MAX_RECORDING_TIME) {
+                stopRecording();
+            }
+        }
+        
+        // Function to process the recording and send it to the server
+        async function processRecording() {
+            // Create a Blob from the audio chunks
+            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+            
+            // Convert the blob to base64
+            const reader = new FileReader();
+            reader.readAsDataURL(audioBlob);
+            
+            reader.onloadend = async () => {
+                const base64Audio = reader.result;
+                try {
+                    // Send the audio data to the server
+                    const response = await fetch('/api/record', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            audio_data: base64Audio,
+                            chatid: currentChatId
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    // Update current chat ID if this is a new chat
+                    if (!currentChatId) {
+                        currentChatId = data.chatid;
+                        updateChatSelector();
+                    }
+                    
+                    // Show success message
+                    recordStatus.textContent = '';
+                    showStatus('Audio processed successfully!', 'success');
+                    
+                    // Load the results after a brief delay
+                    setTimeout(loadChatResults, 1000);
+                    
+                } catch (error) {
+                    recordStatus.textContent = '';
+                    showStatus(`Error processing audio: ${error.message}`, 'error');
+                    console.error('Error processing audio:', error);
+                }
+            };
+        }
+        
+        // Function to show status messages
+        function showStatus(message, type) {
+            statusContainer.textContent = message;
+            statusContainer.className = 'status-message';
+            statusContainer.classList.add(type);
+            statusContainer.style.display = 'block';
+            
+            // Hide the message after 5 seconds
+            setTimeout(() => {
+                statusContainer.style.display = 'none';
+            }, 5000);
+        }
+        
+        // Function to load chat results
+        async function loadChatResults() {
+            const selectedChatId = document.getElementById('chat-id-select').value || currentChatId;
+            if (!selectedChatId) return;
+            
+            try {
+                const response = await fetch(`/results/${selectedChatId}`);
+                const data = await response.json();
+                
+                document.getElementById('results').innerHTML = data
+                    .map(item => `
+                        <div class="translation-item">
+                            <div>${item.translated_content}</div>
+                            <div class="meta">
+                                Created: ${new Date(item.created_at).toLocaleString()}
+                                ${item.updated_at !== item.created_at ? 
+                                  `| Updated: ${new Date(item.updated_at).toLocaleString()}` : ''}
+                            </div>
+                        </div>
+                    `)
+                    .join('');
+            } catch (error) {
+                showStatus(`Error loading chat results: ${error.message}`, 'error');
+                console.error('Error loading chat results:', error);
+            }
         }
 
-        async function updateResults() {
-            const response = await fetch('/results');
-            const data = await response.json();
-            document.getElementById('results').innerHTML = data
-                .map(item => `<p>${item.time}: ${item.text}</p>`)
-                .join('');
+        // Function to load all chats
+        async function loadAllChats() {
+            try {
+                const response = await fetch('/results');
+                const data = await response.json();
+                
+                // Extract unique chat IDs and update selector
+                data.forEach(item => chatIds.add(item.chatid));
+                updateChatSelector();
+                
+                // Display all results
+                document.getElementById('results').innerHTML = data
+                    .map(item => `
+                        <div class="translation-item">
+                            <div><strong>Chat ID:</strong> ${item.chatid}</div>
+                            <div>${item.translated_content}</div>
+                            <div class="meta">
+                                Created: ${new Date(item.created_at).toLocaleString()}
+                                ${item.updated_at !== item.created_at ? 
+                                  `| Updated: ${new Date(item.updated_at).toLocaleString()}` : ''}
+                            </div>
+                        </div>
+                    `)
+                    .join('');
+            } catch (error) {
+                showStatus(`Error loading chats: ${error.message}`, 'error');
+                console.error('Error loading all chats:', error);
+            }
         }
 
-        // Auto-refresh every 5 seconds
-        setInterval(updateResults, 5000);
+        // Function to update the chat selector
+        function updateChatSelector() {
+            const select = document.getElementById('chat-id-select');
+            
+            // Clear existing options except the first one
+            while (select.options.length > 1) {
+                select.remove(1);
+            }
+            
+            // Add current chat ID if it exists
+            if (currentChatId) {
+                chatIds.add(currentChatId);
+            }
+            
+            // Add all unique chat IDs
+            [...chatIds].forEach(chatId => {
+                const option = document.createElement('option');
+                option.value = chatId;
+                option.textContent = chatId;
+                // Select current chat ID if it exists
+                if (chatId === currentChatId) {
+                    option.selected = true;
+                }
+                select.appendChild(option);
+            });
+        }
+
+        // Initialize page
+        window.onload = loadAllChats;
+        
+        // Auto-refresh results periodically
+        setInterval(() => {
+            if (currentChatId) {
+                loadChatResults();
+            }
+        }, 5000);
+        
+        // Check if browser supports MediaRecorder
+        if (!navigator.mediaDevices || !window.MediaRecorder) {
+            recordButton.disabled = true;
+            showStatus('Your browser does not support audio recording. Please use Chrome, Firefox, or Edge.', 'error');
+        }
     </script>
 </body>
 </html>
