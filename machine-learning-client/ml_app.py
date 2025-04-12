@@ -7,8 +7,9 @@ import os
 import uuid
 import tempfile
 import base64
-from time import sleep
+import asyncio
 import logging
+from time import sleep
 from flask import Flask, request, jsonify
 from werkzeug.utils import secure_filename
 from pymongo.errors import ConnectionFailure
@@ -17,23 +18,24 @@ from common.models import AudioTranscription
 from pydantic import BaseModel
 from langchain_openai import ChatOpenAI
 from browser_use import Agent, Browser, BrowserConfig
-
-import asyncio
+import requests
 
 from dotenv import load_dotenv
 
+# Load environment variables
 load_dotenv()
 
-# Configure more detailed logging
+# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
+# Initialize Flask application
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = tempfile.gettempdir()
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # Limit upload size to 16 MB
 
 # Initialize OpenAI client
 openai_api_key = os.getenv('OPENAI_API_KEY')
@@ -43,31 +45,37 @@ if not openai_api_key:
 client = OpenAI(api_key=openai_api_key)
 logger.info("OpenAI client initialized successfully")
 
+# Configure browser automation
 config = BrowserConfig(
-	headless=True,
+    headless=True,
 )
 
-
-
+# Initialize LLM models
 plannerllm = ChatOpenAI(model="o3-mini", api_key=openai_api_key)
 llm = ChatOpenAI(model="gpt-4o", api_key=openai_api_key)
+
+
+class UserQuery(BaseModel):
+    """Model for extracting user queries from audio transcriptions."""
+    is_query: bool
+    user_query: str
+
 
 @app.route('/process_audio', methods=['POST'])
 def process_audio():
     """
-        Process audio file, transcribe with OpenAI, and generate a response with GPT.
+    Process audio file, transcribe with OpenAI, and generate a response with GPT.
 
-        Expects either:
-        1. A multipart form with:
-           - 'audio_file': The audio file to process
-           - 'chatid': (Optional) ID of the chat this recording belongs to
-        2. Or a JSON payload with:
-           - 'audio': Base64 encoded audio data
-           - 'chatid': (Optional) ID of the chat
-           - 'llm_settings': (Optional) Settings for the LLM
+    Expects either:
+    1. A multipart form with:
+       - 'audio_file': The audio file to process
+       - 'chatid': (Optional) ID of the chat this recording belongs to
+    2. Or a JSON payload with:
+       - 'audio': Base64 encoded audio data
+       - 'chatid': (Optional) ID of the chat
 
-        Returns:
-            JSON response with the transcribed question and LLM response.
+    Returns:
+        JSON response with the transcribed question and LLM response.
     """
     chatid = None
     audio_data = None
@@ -77,50 +85,17 @@ def process_audio():
     
     # Check if this is a JSON request with base64 audio
     if request.is_json:
-        data = request.get_json()
-        if not data or 'audio' not in data:
-            logger.warning("JSON request received without audio data")
-            return jsonify({'status': 'error', 'message': 'No audio data provided'}), 400
-        
-        # Get chat ID
-        chatid = data.get('chatid')
-        logger.info(f"Processing JSON request with chatid: {chatid}")
-        
-        # Decode base64 audio
-        base64_audio = data['audio']
-        if ',' in base64_audio:
-            base64_audio = base64_audio.split(',', 1)[1]
-        
-        # Save to temp file
-        try:
-            logger.info("Decoding base64 audio data")
-            audio_data = base64.b64decode(base64_audio)
-            with tempfile.NamedTemporaryFile(suffix='.webm', delete=False) as temp_file:
-                temp_file_path = temp_file.name
-                temp_file.write(audio_data)
-            logger.info(f"Audio data saved to temporary file: {temp_file_path}")
-        except Exception as e:
-            logger.error(f"Error decoding base64 audio: {str(e)}")
-            return jsonify({'status': 'error', 'message': f'Error decoding audio: {str(e)}'}), 400
+        temp_file_path = _handle_json_request(request)
+        if isinstance(temp_file_path, tuple):  # Error response
+            return temp_file_path
+        chatid = request.json.get('chatid')
     
     # Check if this is a multipart form with an audio file
     elif 'audio_file' in request.files:
-        audio_file = request.files['audio_file']
-        
-        # If user submits an empty file
-        if audio_file.filename == '':
-            logger.warning("Empty audio file provided in multipart form")
-            return jsonify({'status': 'error', 'message': 'Empty audio file provided'}), 400
-        
-        # Get chat ID
+        temp_file_path = _handle_multipart_request(request)
+        if isinstance(temp_file_path, tuple):  # Error response
+            return temp_file_path
         chatid = request.form.get('chatid')
-        logger.info(f"Processing multipart form with audio file: {audio_file.filename}, chatid: {chatid}")
-        
-        # Save the file temporarily
-        filename = secure_filename(audio_file.filename)
-        temp_file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        audio_file.save(temp_file_path)
-        logger.info(f"Audio file saved to: {temp_file_path}")
     
     else:
         logger.warning("Request received with no audio data")
@@ -145,36 +120,34 @@ def process_audio():
         logger.info(f"User query: {userquery.user_query}")
         
         if userquery.is_query:
+            # Notify web-app that we have a query and are processing it
+            _notify_web_app(chatid, userquery.user_query)
+            
             # Use browser to get the answer
             logger.info(f"Using browser to get the answer")
             answer = asyncio.run(browser_use(userquery.user_query))
             logger.info(f"Browser response received, length: {len(answer)} chars")
             logger.info(f"Browser response: {answer}")
+            
+            # Save the answer to the database via the web app
+            _save_answer_via_web_app(chatid, userquery.user_query, answer)
         else:
             logger.info(f"User did not ask a question")
             transcribed_text = 'Please ask a question'
             answer = 'I am sorry, it seems like you are not asking a question. Please try again.'
-        
-        
+            
+            # Notify web-app with the non-question and response
+            _notify_web_app(chatid, 'Not a question')
+            _save_answer_via_web_app(chatid, 'Not a question', answer)
         
         # Clean up the temporary file
         if temp_file_path and os.path.exists(temp_file_path):
             os.remove(temp_file_path)
             logger.info(f"Removed temporary file: {temp_file_path}")
         
-        # Save result to database
-        logger.info(f"Saving Q&A pair to database for chatid: {chatid}")
-        doc_id = AudioTranscription.create(
-            chatid=chatid,
-            user_question=transcribed_text,
-            answer=answer
-        )
-        logger.info(f"Successfully saved to database with document ID: {doc_id}")
-        
         # Return success response
         return jsonify({
             'status': 'success',
-            'id': doc_id,
             'chatid': chatid,
             'question': transcribed_text,
             'answer': answer,
@@ -190,19 +163,132 @@ def process_audio():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
-class UserQuery(BaseModel):
-    is_query: bool
-    user_query: str
+def _handle_json_request(request):
+    """
+    Process a JSON request with base64 audio data.
+    
+    Args:
+        request: The Flask request object
+        
+    Returns:
+        str: Path to the temporary audio file or tuple(response, status_code) on error
+    """
+    data = request.get_json()
+    if not data or 'audio' not in data:
+        logger.warning("JSON request received without audio data")
+        return jsonify({'status': 'error', 'message': 'No audio data provided'}), 400
+    
+    # Decode base64 audio
+    base64_audio = data['audio']
+    if ',' in base64_audio:
+        base64_audio = base64_audio.split(',', 1)[1]
+    
+    # Save to temp file
+    try:
+        logger.info("Decoding base64 audio data")
+        audio_data = base64.b64decode(base64_audio)
+        with tempfile.NamedTemporaryFile(suffix='.webm', delete=False) as temp_file:
+            temp_file_path = temp_file.name
+            temp_file.write(audio_data)
+        logger.info(f"Audio data saved to temporary file: {temp_file_path}")
+        return temp_file_path
+    except Exception as e:
+        logger.error(f"Error decoding base64 audio: {str(e)}")
+        return jsonify({'status': 'error', 'message': f'Error decoding audio: {str(e)}'}), 400
+
+
+def _handle_multipart_request(request):
+    """
+    Process a multipart form request with an audio file.
+    
+    Args:
+        request: The Flask request object
+        
+    Returns:
+        str: Path to the temporary audio file or tuple(response, status_code) on error
+    """
+    audio_file = request.files['audio_file']
+    
+    # If user submits an empty file
+    if audio_file.filename == '':
+        logger.warning("Empty audio file provided in multipart form")
+        return jsonify({'status': 'error', 'message': 'Empty audio file provided'}), 400
+    
+    logger.info(f"Processing multipart form with audio file: {audio_file.filename}")
+    
+    # Save the file temporarily
+    try:
+        filename = secure_filename(audio_file.filename)
+        temp_file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        audio_file.save(temp_file_path)
+        logger.info(f"Audio file saved to: {temp_file_path}")
+        return temp_file_path
+    except Exception as e:
+        logger.error(f"Error saving audio file: {str(e)}")
+        return jsonify({'status': 'error', 'message': f'Error saving audio file: {str(e)}'}), 500
+
+
+def _notify_web_app(chatid, query):
+    """
+    Notify the web app that a query is being processed.
+    
+    Args:
+        chatid: The ID of the chat
+        query: The user's query text
+    """
+    try:
+        logger.info(f"Notifying web-app that we have a query and are processing it")
+        web_app_url = os.getenv('WEB_APP_URL', 'http://web:5001')
+        notification_response = requests.post(
+            f"{web_app_url}/api/processing_notification",
+            json={
+                'chatid': chatid,
+                'query': query,
+                'status': 'processing'
+            }
+        )
+        logger.info(f"Notification response: {notification_response.status_code}")
+    except Exception as e:
+        logger.error(f"Error notifying web-app: {str(e)}")
+
+
+def _save_answer_via_web_app(chatid, query, answer):
+    """
+    Save the answer to the web app database directly.
+    
+    Args:
+        chatid: The ID of the chat
+        query: The user's query
+        answer: The answer to save
+    """
+    try:
+        logger.info(f"Saving answer to web-app for chatid: {chatid}")
+        web_app_url = os.getenv('WEB_APP_URL', 'http://web:5001')
+        response = requests.post(
+            f"{web_app_url}/api/save_answer",
+            json={
+                'chatid': chatid,
+                'question': query,
+                'answer': answer
+            }
+        )
+        if response.status_code == 200:
+            logger.info(f"Successfully saved answer via web-app API: {response.status_code}")
+        else:
+            logger.error(f"Error saving answer via web-app: {response.status_code}, {response.text}")
+    except Exception as e:
+        logger.error(f"Error saving answer via web-app: {str(e)}")
+
 
 def process_text_with_llm(text):
     """
-    Process text using OpenAI's GPT models.
+    Process text using OpenAI's GPT models to extract the user query.
 
     Args:
         text (str): The text to process.
 
     Returns:
-        str: The response from the LLM.
+        UserQuery: Object containing the extracted query and whether it's a valid question.
     """
     try:
         logger.info(f"Calling OpenAI API with text: '{text[:50]}...' (truncated)")
@@ -214,7 +300,10 @@ def process_text_with_llm(text):
             messages=[
                 {
                     "role": "system", 
-                    "content": "You are a given some text converted from audio, you need to identify the query of user. Note the text might be incomplete, so you should do your best to infer the query based on the existing information. You should not answer the question, extract the query and use it as output"
+                    "content": "You are a given some text converted from audio, you need to identify the query of user. "
+                                "Note the text might be incomplete, so you should do your best to infer the query based on the existing information. "
+                                "Make sure the query you put in response is a valid question."
+                                "You should not answer the question, extract the query and use it as output"
                 },
                 {
                     "role": "user", 
@@ -231,9 +320,19 @@ def process_text_with_llm(text):
     
     except Exception as e:
         logger.error(f"Error from OpenAI API: {str(e)}", exc_info=True)
-        return f"Sorry, I encountered an error processing your request: {str(e)}"
+        raise Exception(f"Error processing text with LLM: {str(e)}")
+
 
 async def browser_use(task):
+    """
+    Use browser automation to find answers to user queries.
+    
+    Args:
+        task (str): The user query to answer
+        
+    Returns:
+        str: The answer from the browser automation
+    """
     browser = Browser(config=config)
     try:
         agent = Agent(
@@ -250,6 +349,7 @@ async def browser_use(task):
     except Exception as e:
         logger.error(f"Error from Browser Use: {str(e)}", exc_info=True)
         return f"Sorry, I encountered an error processing your request: {str(e)}"
+
 
 def transcribe_audio(file_path):
     """
@@ -342,5 +442,6 @@ if __name__ == '__main__':
                 logger.error(f"Could not connect to MongoDB: {str(e)}")
             sleep(5)
     
-    logger.info("Starting Flask server on port 5001")
-    app.run(host='0.0.0.0', port=5001)
+    port = int(os.getenv('PORT', 5001))
+    logger.info(f"Starting Flask server on port {port}")
+    app.run(host='0.0.0.0', port=port)
