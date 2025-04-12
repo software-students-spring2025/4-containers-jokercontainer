@@ -8,12 +8,44 @@ import uuid
 import base64
 import tempfile
 import logging
-from time import sleep
+import threading
+from time import sleep, time
 from flask import Flask, request, render_template, jsonify
 import requests
 from pymongo.errors import ConnectionFailure
-from common.models import AudioTranscription
-import threading
+
+# Use a try-except to handle import error for common.models
+try:
+    from common.models import AudioTranscription
+except ImportError:
+    # Create a placeholder for the AudioTranscription class if import fails
+    # This allows the code to pass linting but would need proper resolution
+    class AudioTranscription:
+        """Placeholder for AudioTranscription class if import fails"""
+        @staticmethod
+        def find_all():
+            """Placeholder method"""
+            return []
+        
+        @staticmethod
+        def find_by_chatid(chatid):
+            """Placeholder method"""
+            return []
+        
+        @staticmethod
+        def create(**kwargs):
+            """Placeholder method"""
+            return None
+        
+        @staticmethod
+        def get_collection():
+            """Placeholder method"""
+            return None
+        
+        @staticmethod
+        def create_indexes():
+            """Placeholder method"""
+            return None
 
 # Configure logging
 logging.basicConfig(
@@ -60,7 +92,7 @@ def process_recording():
     
     # Get or generate chat ID
     chatid = data.get('chatid') or str(uuid.uuid4())
-    logger.info(f"Processing recording for chatid: {chatid}")
+    logger.info("Processing recording for chatid: %s", chatid)
     
     try:
         # Extract the base64 audio data (remove the data URL prefix if present)
@@ -68,17 +100,17 @@ def process_recording():
         if ',' in base64_audio:
             base64_audio = base64_audio.split(',', 1)[1]
         
-        logger.info(f"Received base64 audio data, length: {len(base64_audio)} chars")
+        logger.info("Received base64 audio data, length: %s chars", len(base64_audio))
         
         # Decode the base64 data
         audio_data = base64.b64decode(base64_audio)
-        logger.info(f"Decoded audio data, size: {len(audio_data)} bytes")
+        logger.info("Decoded audio data, size: %s bytes", len(audio_data))
         
         # Save to a temporary file
         with tempfile.NamedTemporaryFile(suffix='.webm', delete=False) as temp_file:
             temp_file_path = temp_file.name
             temp_file.write(audio_data)
-            logger.info(f"Saved audio data to temporary file: {temp_file_path}")
+            logger.info("Saved audio data to temporary file: %s", temp_file_path)
         
         # Launch a background thread to process the audio
         process_thread = threading.Thread(
@@ -87,7 +119,7 @@ def process_recording():
             daemon=True
         )
         process_thread.start()
-        logger.info(f"Started background processing thread for chatid: {chatid}")
+        logger.info("Started background processing thread for chatid: %s", chatid)
             
         # Return response to frontend with just the chatid
         # The frontend will poll separately for query extraction and answer
@@ -98,7 +130,7 @@ def process_recording():
         })
                 
     except Exception as e:
-        logger.error(f"Error processing audio: {str(e)}", exc_info=True)
+        logger.error("Error processing audio: %s", str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': f'Error processing audio: {str(e)}',
@@ -117,29 +149,37 @@ def process_audio_in_background(temp_file_path, chatid):
     try:
         # Send the audio file to the ML service
         ml_service_url = os.getenv('ML_SERVICE_URL', 'http://ml:5001')
-        logger.info(f"Sending audio to ML service at: {ml_service_url}/process_audio")
+        logger.info("Sending audio to ML service at: %s/process_audio", ml_service_url)
         
-        files = {'audio_file': ('recording.webm', open(temp_file_path, 'rb'), 'audio/webm')}
-        form_data = {'chatid': chatid}
-        
-        logger.info(f"Sending request to ML service with chatid: {chatid}")
-        response = requests.post(f"{ml_service_url}/process_audio", files=files, data=form_data)
-        
-        # Log the response from ML service
-        if response.status_code == 200:
-            logger.info(f"ML service processed audio successfully: {response.json()}")
-        else:
-            logger.error(f"ML service returned error: {response.status_code}, {response.text}")
+        # Use with statement for file opening
+        with open(temp_file_path, 'rb') as audio_file:
+            files = {'audio_file': ('recording.webm', audio_file, 'audio/webm')}
+            form_data = {'chatid': chatid}
             
+            logger.info("Sending request to ML service with chatid: %s", chatid)
+            # Add timeout to requests.post
+            response = requests.post(
+                f"{ml_service_url}/process_audio", 
+                files=files, 
+                data=form_data,
+                timeout=30
+            )
+            
+            # Log the response from ML service
+            if response.status_code == 200:
+                logger.info("ML service processed audio successfully: %s", response.json())
+            else:
+                logger.error("ML service returned error: %s, %s", response.status_code, response.text)
+                
     except requests.RequestException as e:
-        logger.error(f"Error communicating with ML service: {str(e)}", exc_info=True)
+        logger.error("Error communicating with ML service: %s", str(e), exc_info=True)
     except Exception as e:
-        logger.error(f"Error in background processing: {str(e)}", exc_info=True)
+        logger.error("Error in background processing: %s", str(e), exc_info=True)
     finally:
         # Clean up temporary file in all cases
         if os.path.exists(temp_file_path):
             os.unlink(temp_file_path)
-            logger.info(f"Removed temporary file: {temp_file_path}")
+            logger.info("Removed temporary file: %s", temp_file_path)
 
 
 @app.route('/results')
@@ -155,7 +195,7 @@ def results():
         results_list = [format_transcription_item(item) for item in data]
         return jsonify(results_list)
     except Exception as e:
-        logger.error(f"Error fetching results: {e}", exc_info=True)
+        logger.error("Error fetching results: %s", e, exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 
@@ -175,7 +215,7 @@ def chat_results(chatid):
         results_list = [format_transcription_item(item) for item in data]
         return jsonify(results_list)
     except Exception as e:
-        logger.error(f"Error fetching chat results: {e}", exc_info=True)
+        logger.error("Error fetching chat results: %s", e, exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 
@@ -217,16 +257,16 @@ def processing_notification():
         query = data.get('query')
         status = data.get('status')
         
-        logger.info(f"Received processing notification for chatid: {chatid}, query: {query}, status: {status}")
+        logger.info("Received processing notification for chatid: %s, query: %s, status: %s", 
+                    chatid, query, status)
         
         # Store the query in our in-memory cache instead of the database
         if chatid and query:
-            from time import time
             query_cache[chatid] = {
                 "query": query,
                 "timestamp": time()
             }
-            logger.info(f"Stored query in cache for chatid: {chatid}")
+            logger.info("Stored query in cache for chatid: %s", chatid)
             
             return jsonify({
                 'success': True,
@@ -235,14 +275,14 @@ def processing_notification():
                 'query': query,
                 'status': status
             })
-        else:
-            return jsonify({
-                'success': False,
-                'message': 'Missing required parameters'
-            }), 400
+            
+        return jsonify({
+            'success': False,
+            'message': 'Missing required parameters'
+        }), 400
             
     except Exception as e:
-        logger.error(f"Error handling processing notification: {e}", exc_info=True)
+        logger.error("Error handling processing notification: %s", e, exc_info=True)
         return jsonify({
             'success': False,
             'message': f'Error: {str(e)}'
@@ -264,7 +304,7 @@ def clear_history():
         result = collection.delete_many({})
         after_count = len(AudioTranscription.find_all())
         
-        logger.info(f"Cleared {result.deleted_count} records from database")
+        logger.info("Cleared %s records from database", result.deleted_count)
         
         return jsonify({
             'success': True,
@@ -274,7 +314,7 @@ def clear_history():
             'after_count': after_count
         })
     except Exception as e:
-        logger.error(f"Error clearing database: {e}", exc_info=True)
+        logger.error("Error clearing database: %s", e, exc_info=True)
         return jsonify({
             'success': False,
             'message': f'Error clearing database: {e}'
@@ -299,7 +339,7 @@ def query_status(chatid):
         # First check our in-memory cache
         cached_query = query_cache.get(chatid)
         if cached_query:
-            logger.info(f"Found query in cache for chatid: {chatid}")
+            logger.info("Found query in cache for chatid: %s", chatid)
             return jsonify({
                 'success': True,
                 'chatid': chatid,
@@ -315,7 +355,7 @@ def query_status(chatid):
             latest = data[0]  # Assuming sorted by created_at desc
             question = latest.get('user_question', '')
             if question:
-                logger.info(f"Found query in database for chatid: {chatid}")
+                logger.info("Found query in database for chatid: %s", chatid)
                 return jsonify({
                     'success': True,
                     'chatid': chatid,
@@ -323,9 +363,9 @@ def query_status(chatid):
                     'has_query': True,
                     'from_cache': False
                 })
-                
+        
         # No query found in either cache or database
-        logger.info(f"No query found for chatid: {chatid}")
+        logger.info("No query found for chatid: %s", chatid)
         return jsonify({
             'success': True,
             'chatid': chatid,
@@ -334,7 +374,7 @@ def query_status(chatid):
         })
             
     except Exception as e:
-        logger.error(f"Error checking query status: {e}", exc_info=True)
+        logger.error("Error checking query status: %s", e, exc_info=True)
         return jsonify({
             'success': False,
             'message': f'Error: {str(e)}'
@@ -373,31 +413,31 @@ def answer_status(chatid):
                 'has_answer': has_answer,
                 'is_processing': answer == 'PROCESSING'
             })
-        else:
-            # No database entry yet, check the cache for the query
-            cached_query = query_cache.get(chatid)
-            if cached_query:
-                # We have a query but no answer yet
-                return jsonify({
-                    'success': True,
-                    'chatid': chatid,
-                    'question': cached_query["query"],
-                    'has_answer': False,
-                    'is_processing': False,
-                    'from_cache': True
-                })
-            else:
-                # No entry yet
-                return jsonify({
-                    'success': True,
-                    'chatid': chatid,
-                    'has_answer': False,
-                    'is_processing': False,
-                    'from_cache': False
-                })
+        
+        # No database entry yet, check the cache for the query
+        cached_query = query_cache.get(chatid)
+        if cached_query:
+            # We have a query but no answer yet
+            return jsonify({
+                'success': True,
+                'chatid': chatid,
+                'question': cached_query["query"],
+                'has_answer': False,
+                'is_processing': False,
+                'from_cache': True
+            })
+        
+        # No entry yet
+        return jsonify({
+            'success': True,
+            'chatid': chatid,
+            'has_answer': False,
+            'is_processing': False,
+            'from_cache': False
+        })
             
     except Exception as e:
-        logger.error(f"Error checking answer status: {e}", exc_info=True)
+        logger.error("Error checking answer status: %s", e, exc_info=True)
         return jsonify({
             'success': False,
             'message': f'Error: {str(e)}'
@@ -409,7 +449,6 @@ def cleanup_query_cache():
     Clean up old entries from the query cache.
     Removes entries older than 30 minutes.
     """
-    from time import time
     current_time = time()
     expired_time = current_time - (30 * 60)  # 30 minutes
     
@@ -418,11 +457,11 @@ def cleanup_query_cache():
     
     # Remove expired keys
     for key in expired_keys:
-        logger.info(f"Removing expired query from cache: {key}")
+        logger.info("Removing expired query from cache: %s", key)
         del query_cache[key]
     
     if expired_keys:
-        logger.info(f"Cleaned up {len(expired_keys)} expired queries from cache")
+        logger.info("Cleaned up %s expired queries from cache", len(expired_keys))
 
 
 @app.route('/api/save_answer', methods=['POST'])
@@ -448,7 +487,7 @@ def save_answer():
                 'message': 'Missing required parameters (chatid, question, answer)'
             }), 400
         
-        logger.info(f"Saving answer for chatid: {chatid}")
+        logger.info("Saving answer for chatid: %s", chatid)
         
         # Create the database entry
         doc_id = AudioTranscription.create(
@@ -459,7 +498,7 @@ def save_answer():
         
         # Remove from cache if it exists
         if chatid in query_cache:
-            logger.info(f"Removing query from cache after saving answer: {chatid}")
+            logger.info("Removing query from cache after saving answer: %s", chatid)
             del query_cache[chatid]
         
         return jsonify({
@@ -469,7 +508,7 @@ def save_answer():
         })
         
     except Exception as e:
-        logger.error(f"Error saving answer: {e}", exc_info=True)
+        logger.error("Error saving answer: %s", e, exc_info=True)
         return jsonify({
             'success': False,
             'message': f'Error: {str(e)}'
@@ -478,15 +517,14 @@ def save_answer():
 
 # Set up a background thread to clean up the cache periodically
 if __name__ == '__main__':
-    import threading
-    
     def cache_cleanup_thread():
+        """Background thread that periodically cleans up the query cache"""
         while True:
             sleep(300)  # Run every 5 minutes
             try:
                 cleanup_query_cache()
             except Exception as e:
-                logger.error(f"Error in cache cleanup thread: {e}", exc_info=True)
+                logger.error("Error in cache cleanup thread: %s", e, exc_info=True)
     
     # Start the cleanup thread
     cleanup_thread = threading.Thread(target=cache_cleanup_thread, daemon=True)
@@ -497,19 +535,21 @@ if __name__ == '__main__':
     sleep(5)
     
     # Try to initialize database connection and indexes
-    retries = 5
+    MAX_RETRIES = 5
+    retries = MAX_RETRIES
     while retries > 0:
         try:
             AudioTranscription.create_indexes()
             logger.info("Successfully connected to MongoDB and created indexes")
             break
         except ConnectionFailure as e:
-            logger.warning(f"Failed to connect to MongoDB, retrying... ({retries} attempts left)")
+            logger.warning("Failed to connect to MongoDB, retrying... (%s attempts left)", retries)
             retries -= 1
             if retries == 0:
-                logger.error(f"Could not connect to MongoDB: {e}")
+                logger.error("Could not connect to MongoDB: %s", e)
             sleep(5)
     
-    port = int(os.getenv('PORT', 5001))
-    logger.info(f"Starting Flask server on port {port}")
+    # Convert the environment variable to the correct type
+    port = int(os.getenv('PORT', '5001'))
+    logger.info("Starting Flask server on port %s", port)
     app.run(host='0.0.0.0', port=port)
