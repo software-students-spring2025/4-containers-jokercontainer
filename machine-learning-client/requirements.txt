@@ -15,5 +15,6 @@ langchain_anthropic
 langchain-google-genai==2.0.8
 MainContentExtractor==0.0.4
 asyncio
+dill
 
 # This project requires Python 3.11 or higher
