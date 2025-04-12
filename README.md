@@ -3,8 +3,7 @@
 
 # Audio Processing and Question-Answering System
 
-A containerized system that integrates a web application frontend with a machine learning backend for audio recording, transcription, and intelligent question answering. The system uses a Flask-based web application for user interaction, a specialized ML client powered by OpenAI for speech-to-text conversion and answer retrieval, and MongoDB for persistent storage of questions and answers.
-
+A containerized system that integrates a web application, a machine learning client and mongodb. 
 ## Team Members
 
 - [Alan Chen](https://github.com/Chen-zexi)
@@ -15,22 +14,14 @@ A containerized system that integrates a web application frontend with a machine
 
 This project consists of three main components:
 
-1. **Web Application (web-app)**: Web app that has html and javascript for frontend and flask for backend
-2. **Machine Learning Client (machine-learning-client)**: Use OpenAI Speech to text for transcriptions of user query, then use langchain and browser use agent for answer retrieval
-3. **MongoDB**: Database for storing questions and answers
-
-
-## Technical Features
-
+1. **Web Application (web-app)**:
 - Interactive web interface with audio recording capabilities via HTML/JavaScript frontend
 - Flask backend for handling web requests and user interactions
-- AI-powered speech-to-text transcription using OpenAI models
-- Intelligent answer retrieval using langchain and browser automation agents
+2. **Machine Learning Client (machine-learning-client)**: 
+- Speech-to-text transcription using OpenAI models
+- Intelligent answer retrieval using langchain and browser use agent
+3. **MongoDB**: 
 - MongoDB database integration for persistent storage of Q&A history
-- Real-time processing status updates with loading animation
-- Containerized architecture for easy deployment and scaling
-- Asynchronous communication between system components
-- Error handling and retry mechanisms
 
 ## Prerequisites
 
@@ -69,16 +60,6 @@ This project consists of three main components:
 4. The system will process your audio and show a loading animation
 5. When processing is complete, the answer will be displayed in formatted markdown
 
-## Database Management
-
-The system stores all questions and answers in MongoDB. To clear all data:
-
-```bash
-./clear_db.sh
-```
-
-Alternatively, you can use the "Clear History" button in the web interface.
-
 ## Development
 
 ### Project Structure
@@ -97,18 +78,12 @@ Alternatively, you can use the "Clear History" button in the web interface.
 │   ├── templates/           # HTML templates
 │   │   └── index.html       # Main page template
 │   └── requirements.txt     # Python dependencies
-├── docker-compose.yml       # Multi-container configuration
-├── clear_database.py        # Script to clear database data
-└── clear_db.sh              # Shell script for database clearing
+└── docker-compose.yml       # Multi-container configuration
 ```
 
 ### Environment Variables
 
-- `OPENAI_API_KEY`: Your OpenAI API key for accessing GPT and Whisper models
-- `MONGO_URI`: MongoDB connection string (default: mongodb://mongodb:27017/mydb)
-- `ML_SERVICE_URL`: URL of the ML service (default: http://ml:5001)
-- `WEB_APP_URL`: URL of the web app (default: http://web:5001)
-- `PORT`: Port for the services (default: 5001)
+- `OPENAI_API_KEY`: Your OpenAI API key
 
 ## Troubleshooting
 

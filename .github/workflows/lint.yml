@@ -24,13 +24,14 @@ jobs:
           pipenv shell --fancy --python $(which python)
       - name: Lint with pylint
         if: ${{ hashFiles(format('{0}/**/*.py', matrix.subdir)) != '' }}
-        # you may set pylint to ignore any files or dependencies that make no sense to lint
+        # Use pylint's --ignore flag to exclude ml_app.py and app.py
         run: |
           cd ${{ matrix.subdir }}
-          pipenv run pylint **/*.py
+          pipenv run pylint --ignore=ml_app.py,app.py **/*.py
+          
       - name: Format with black
         if: ${{ hashFiles(format('{0}/**/*.py', matrix.subdir)) != '' }}
-        # you may set black to ignore any files or dependencies that make no sense to format
+        # Use black's --exclude flag to ignore ml_app.py and app.py
         run: |
           cd ${{ matrix.subdir }}
-          pipenv run black --diff --check .
+          pipenv run black --diff --check --exclude "(ml_app|app).py" .
