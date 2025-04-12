@@ -28,6 +28,7 @@ services:
       - PYTHONPATH=/app:/app/common
       - MONGO_URI=mongodb://mongodb:27017/mydb
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - WEB_APP_URL=http://web:5001
     depends_on:
       mongodb:
         condition: service_healthy
