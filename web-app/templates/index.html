@@ -2,29 +2,53 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Voice Recognition Demo</title>
+    <title>Voice Assistant Q&A</title>
+    <!-- Add Marked.js for Markdown support -->
+    <script src="https://cdn.jsdelivr.net/npm/marked@4.3.0/marked.min.js"></script>
+    <!-- Add highlight.js for code syntax highlighting -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.7.0/styles/github.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.7.0/highlight.min.js"></script>
     <style>
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             max-width: 800px;
             margin: 0 auto;
             padding: 20px;
+            background-color: #f9f9f9;
+            color: #333;
+            line-height: 1.6;
+        }
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #2c3e50;
+            margin-top: 30px;
         }
         button {
-            padding: 10px 16px;
+            padding: 12px 20px;
             margin: 10px 0;
-            background-color: #4CAF50;
+            background-color: #3498db;
             color: white;
             border: none;
-            border-radius: 4px;
+            border-radius: 6px;
             cursor: pointer;
             font-size: 16px;
+            font-weight: 600;
+            transition: background-color 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
         button:hover {
-            background-color: #45a049;
+            background-color: #2980b9;
+        }
+        button:active {
+            transform: translateY(1px);
         }
         button.recording {
-            background-color: #f44336;
+            background-color: #e74c3c;
             animation: pulse 1s infinite;
         }
         @keyframes pulse {
@@ -33,88 +57,418 @@
             100% { opacity: 1; }
         }
         button:disabled {
-            background-color: #cccccc;
+            background-color: #bdc3c7;
             cursor: not-allowed;
+            box-shadow: none;
+        }
+        button.danger {
+            background-color: #e74c3c;
+        }
+        button.danger:hover {
+            background-color: #c0392b;
+        }
+        button.secondary {
+            background-color: #2ecc71;
+        }
+        button.secondary:hover {
+            background-color: #27ae60;
         }
         .recording-timer {
             margin-left: 10px;
             font-size: 18px;
             font-weight: bold;
+            color: #e74c3c;
         }
         .chat-container {
-            margin-top: 20px;
+            margin-top: 30px;
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
         }
         .translation-item {
-            border: 1px solid #ddd;
-            padding: 15px;
+            border: 1px solid #eee;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            background-color: #fff;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+            transition: transform 0.2s ease;
+        }
+        .translation-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .question-text {
+            font-weight: 600;
+            color: #2c3e50;
             margin-bottom: 10px;
-            border-radius: 4px;
-            background-color: #f9f9f9;
+        }
+        .answer-text {
+            color: #34495e;
         }
         .meta {
-            color: #666;
+            color: #7f8c8d;
             font-size: 0.8em;
-            margin-top: 5px;
+            margin-top: 10px;
+            border-top: 1px solid #eee;
+            padding-top: 10px;
         }
         .controls {
             display: flex;
             align-items: center;
             margin-bottom: 20px;
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
         }
         #record-status {
             margin-left: 10px;
             font-weight: bold;
+            color: #e74c3c;
         }
         select {
-            padding: 8px;
-            border-radius: 4px;
+            padding: 12px;
+            border-radius: 6px;
             margin-right: 10px;
+            min-width: 250px;
+            border: 1px solid #ddd;
+            font-size: 14px;
+            background-color: #fff;
+        }
+        select:focus {
+            outline: none;
+            border-color: #3498db;
+            box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
         }
         .chat-selector {
             margin: 20px 0;
             display: flex;
             align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
         }
         .status-message {
             margin: 10px 0;
-            padding: 10px;
-            border-radius: 4px;
+            padding: 15px;
+            border-radius: 6px;
+            font-weight: 500;
         }
         .error {
-            background-color: #ffe6e6;
-            color: #d8000c;
-            border: 1px solid #ffc0c0;
+            background-color: #fef0f0;
+            color: #e74c3c;
+            border: 1px solid #f6d0d0;
         }
         .success {
-            background-color: #e6ffe6;
-            color: #006400;
-            border: 1px solid #c0ffc0;
+            background-color: #f0faf0;
+            color: #27ae60;
+            border: 1px solid #d0f6d0;
+        }
+        .processing-animation {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 30px;
+            background-color: #f5faff;
+            border-radius: 10px;
+            margin: 20px 0;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+        .loading-circle {
+            width: 60px;
+            height: 60px;
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 15px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .processing-text {
+            font-size: 18px;
+            font-weight: bold;
+            color: #3498db;
+            text-align: center;
+        }
+        .right-aligned {
+            margin-left: auto;
+        }
+        .app-description {
+            margin-bottom: 25px;
+            color: #7f8c8d;
+            font-size: 1.1em;
+            line-height: 1.6;
+        }
+        .selector-container {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            flex: 1;
+        }
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .query-display {
+            margin-top: 10px;
+            font-size: 1.2em;
+            font-weight: 500;
+            color: #2c3e50;
+            background-color: #f5faff;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #3498db;
+        }
+        .recording-section {
+            margin-bottom: 30px;
+            display: flex;
+            flex-direction: column;
+        }
+        .recording-controls {
+            display: flex;
+            align-items: center;
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px 10px 0 0;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+        }
+        .query-section {
+            background-color: white;
+            border-radius: 0 0 10px 10px;
+            padding: 0 20px 20px 20px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+        }
+        .answer-display {
+            display: none;
+            margin-top: 15px;
+            padding: 15px;
+            border-radius: 8px;
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+        .answer-display .answer-text {
+            color: #34495e;
+            line-height: 1.6;
+        }
+        @media (max-width: 768px) {
+            .chat-selector {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .right-aligned {
+                margin-left: 0;
+                margin-top: 10px;
+            }
+            .button-group {
+                justify-content: space-between;
+            }
+        }
+        /* Improved styling for markdown content */
+        .answer-content {
+            line-height: 1.7;
+            overflow-wrap: break-word;
+            word-wrap: break-word;
+            max-height: 500px;
+            overflow-y: auto;
+            padding-right: 10px;
+            scrollbar-width: thin;
+        }
+        
+        .answer-content::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        .answer-content::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+        
+        .answer-content::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 4px;
+        }
+        
+        .answer-content::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
+        }
+        
+        /* Code block styling */
+        .answer-content pre {
+            background-color: #f6f8fa;
+            border-radius: 6px;
+            padding: 12px;
+            overflow-x: auto;
+            margin: 15px 0;
+            border: 1px solid #e1e4e8;
+        }
+        
+        .answer-content code {
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+            font-size: 0.9em;
+            background-color: #f6f8fa;
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+        }
+        
+        .answer-content pre code {
+            background-color: transparent;
+            padding: 0;
+            border-radius: 0;
+            color: inherit;
+        }
+        
+        /* Table styling */
+        .answer-content table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 15px 0;
+            overflow-x: auto;
+            display: block;
+        }
+        
+        .answer-content th,
+        .answer-content td {
+            border: 1px solid #ddd;
+            padding: 8px 12px;
+            text-align: left;
+        }
+        
+        .answer-content th {
+            background-color: #f3f3f3;
+            font-weight: 600;
+        }
+        
+        .answer-content tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        
+        /* Blockquote styling */
+        .answer-content blockquote {
+            border-left: 4px solid #dfe2e5;
+            color: #6a737d;
+            margin: 0 0 16px;
+            padding: 0 16px;
+        }
+        
+        /* List styling */
+        .answer-content ul,
+        .answer-content ol {
+            padding-left: 2em;
+        }
+        
+        /* Image styling */
+        .answer-content img {
+            max-width: 100%;
+            height: auto;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        
+        /* Horizontal rule */
+        .answer-content hr {
+            height: 1px;
+            background-color: #dfe2e5;
+            border: none;
+            margin: 16px 0;
+        }
+        
+        /* Expand/collapse button for long responses */
+        .expand-button {
+            display: none;
+            background-color: #f0f0f0;
+            border: none;
+            padding: 5px 10px;
+            margin-top: 5px;
+            border-radius: 4px;
+            font-size: 12px;
+            color: #555;
+            cursor: pointer;
+        }
+        
+        .expand-button:hover {
+            background-color: #e0e0e0;
+        }
+        
+        /* Previous questions styling */
+        .translation-item .answer-content {
+            max-height: 300px;
+        }
+        
+        /* Responsive styling */
+        @media (max-width: 768px) {
+            .answer-content {
+                max-height: 300px;
+            }
         }
     </style>
 </head>
 <body>
-    <h1>Audio Recording & Transcription</h1>
+    <h1>Voice Assistant Q&A</h1>
+    
+    <div class="app-description">
+        Ask questions with your voice and an AI agent will browse the web to answer your question.
+    </div>
     
     <div class="status-message" id="status-container" style="display: none;"></div>
     
-    <div class="controls">
-        <button id="record-button">Start Recording</button>
-        <span id="record-status"></span>
-        <span id="timer" class="recording-timer" style="display: none;">00:00</span>
+    <div class="recording-section">
+        <div class="recording-controls">
+            <button id="record-button">Start Recording</button>
+            <span id="record-status" style="display: none;">Recording...</span>
+            <span id="timer" class="recording-timer" style="display: none;">00:00</span>
+        </div>
+        
+        <div class="query-section">
+            <!-- Query display section that shows as soon as query is extracted -->
+            <div class="query-display" id="current-query" style="display: none;"></div>
+            
+            <!-- Answer display section that shows when answer is ready -->
+            <div class="answer-display" id="current-answer" style="display: none;">
+                <div class="answer-text"><strong>Answer:</strong></div>
+                <div id="answer-content" class="answer-content"></div>
+                <button id="expand-current-answer" class="expand-button">Show More</button>
+            </div>
+            
+            <!-- Processing animation -->
+            <div class="processing-animation" id="global-processing" style="display: none;">
+                <div class="loading-circle"></div>
+                <div class="processing-text">Processing your question...</div>
+            </div>
+        </div>
     </div>
 
     <div class="chat-container">
-        <h2>Transcriptions</h2>
+        <h2>Previous Questions</h2>
         <div class="chat-selector">
-            <select id="chat-id-select" onchange="loadChatResults()">
-                <option value="">Select a chat</option>
-            </select>
-            <button onclick="loadAllChats()">Load All Chats</button>
+            <div class="selector-container">
+                <select id="chat-id-select" onchange="loadChatResults()">
+                    <option value="">Select a question</option>
+                </select>
+                <div class="button-group">
+                    <button class="secondary" onclick="loadAllChats()">View All Questions</button>
+                    <button class="danger" onclick="clearHistory()">Clear History</button>
+                </div>
+            </div>
         </div>
         <div id="results"></div>
     </div>
 
     <script>
+        // Initialize marked with options
+        marked.setOptions({
+            gfm: true,
+            breaks: true,
+            smartLists: true,
+            headerIds: false
+        });
+        
         // Variables for recording
         let mediaRecorder;
         let audioChunks = [];
@@ -122,14 +476,19 @@
         let timerInterval;
         let recordingStartTime;
         let currentChatId = null;
+        let processingPollInterval = null;
+        let lastSelectedChatId = null; // Track the last selected chat ID
         const MAX_RECORDING_TIME = 30000; // 30 seconds
-        const chatIds = new Set();
+        const chatInfo = new Map(); // Map to store chat ID to question mapping
         
         // Get DOM elements
         const recordButton = document.getElementById('record-button');
         const recordStatus = document.getElementById('record-status');
         const timerDisplay = document.getElementById('timer');
         const statusContainer = document.getElementById('status-container');
+        const globalProcessingDiv = document.getElementById('global-processing');
+        const currentQueryDisplay = document.getElementById('current-query');
+        const chatSelector = document.getElementById('chat-id-select');
         
         // Initialize recorder
         recordButton.addEventListener('click', toggleRecording);
@@ -164,12 +523,28 @@
             
             mediaRecorder.addEventListener('stop', processRecording);
             
+            // If there's a current query/answer, move it to history before starting a new recording
+            if (currentChatId && 
+                currentQueryDisplay.style.display !== 'none' && 
+                document.getElementById('current-answer').style.display !== 'none') {
+                moveCurrentQueryToHistory();
+            }
+            
             // Start the recording
             mediaRecorder.start();
             isRecording = true;
             recordButton.textContent = 'Stop Recording';
             recordButton.classList.add('recording');
-            recordStatus.textContent = 'Recording...';
+            
+            // Show recording status
+            recordStatus.style.display = 'inline';
+            
+            // Reset and hide current query display, answer display for the new recording
+            currentQueryDisplay.textContent = '';
+            currentQueryDisplay.style.display = 'none';
+            document.getElementById('answer-content').innerHTML = '';
+            document.getElementById('current-answer').style.display = 'none';
+            document.getElementById('expand-current-answer').style.display = 'none';
             
             // Start timer
             recordingStartTime = Date.now();
@@ -192,7 +567,10 @@
                 isRecording = false;
                 recordButton.textContent = 'Start Recording';
                 recordButton.classList.remove('recording');
-                recordStatus.textContent = 'Processing...';
+                
+                // Hide recording status
+                recordStatus.style.display = 'none';
+                
                 
                 // Stop and reset timer
                 clearInterval(timerInterval);
@@ -218,6 +596,97 @@
             }
         }
         
+        // Function to render markdown content
+        function renderMarkdown(text) {
+            if (!text) return '';
+            
+            try {
+                const html = marked.parse(text);
+                return html;
+            } catch (error) {
+                console.error('Error parsing markdown:', error);
+                return text; // Fallback to plain text if markdown parsing fails
+            }
+        }
+        
+        // Function to toggle expanded view of long answers
+        function toggleExpandedView(contentElement, buttonElement) {
+            if (contentElement.style.maxHeight) {
+                contentElement.style.maxHeight = '';
+                buttonElement.textContent = 'Show More';
+            } else {
+                contentElement.style.maxHeight = 'none';
+                buttonElement.textContent = 'Show Less';
+            }
+        }
+        
+        // Function to check if content needs expand button
+        function checkContentHeight(contentElement, buttonElement) {
+            // Reset max height to check scrollHeight
+            const originalMaxHeight = contentElement.style.maxHeight;
+            contentElement.style.maxHeight = '';
+            
+            // If content is taller than 500px (or 300px for prev questions), show expand button
+            const threshold = contentElement.classList.contains('translation-item') ? 300 : 500;
+            
+            if (contentElement.scrollHeight > threshold) {
+                buttonElement.style.display = 'block';
+                contentElement.style.maxHeight = threshold + 'px';
+            } else {
+                buttonElement.style.display = 'none';
+            }
+            
+            // Restore original max height if it was set
+            if (originalMaxHeight) {
+                contentElement.style.maxHeight = originalMaxHeight;
+            }
+        }
+        
+        // Function to highlight code blocks after markdown is rendered
+        function highlightCodeBlocks() {
+            document.querySelectorAll('pre code').forEach((block) => {
+                hljs.highlightElement(block);
+            });
+        }
+        
+        // Helper function to show or hide elements with optional message
+        function toggleElement(element, show, message = null) {
+            if (typeof element === 'string') {
+                element = document.getElementById(element);
+            }
+            if (!element) return;
+            
+            element.style.display = show ? (element.classList.contains('flex') ? 'flex' : 'block') : 'none';
+            
+            if (message && element.querySelector('.processing-text')) {
+                element.querySelector('.processing-text').textContent = message;
+            }
+        }
+        
+        // Helper function to display an answer in the UI
+        function displayAnswer(container, answer, expandButtonId) {
+            const answerElement = document.getElementById(container);
+            answerElement.innerHTML = renderMarkdown(answer);
+            toggleElement('current-answer', true);
+            
+            // Initialize code highlighting
+            highlightCodeBlocks();
+            
+            // Check if we need to show expand button
+            checkContentHeight(
+                answerElement,
+                document.getElementById(expandButtonId)
+            );
+        }
+        
+        // Add event listener for expand button
+        document.getElementById('expand-current-answer').addEventListener('click', function() {
+            toggleExpandedView(
+                document.getElementById('answer-content'),
+                this
+            );
+        });
+        
         // Function to process the recording and send it to the server
         async function processRecording() {
             // Create a Blob from the audio chunks
@@ -230,6 +699,10 @@
             reader.onloadend = async () => {
                 const base64Audio = reader.result;
                 try {
+                    // Generate a new chat ID for each new recording
+                    // This ensures each query has a unique ID
+                    const newChatId = crypto.randomUUID();
+                    
                     // Send the audio data to the server
                     const response = await fetch('/api/record', {
                         method: 'POST',
@@ -238,31 +711,163 @@
                         },
                         body: JSON.stringify({
                             audio_data: base64Audio,
-                            chatid: currentChatId
+                            chatid: newChatId // Always use a new ID
                         })
                     });
                     
                     const data = await response.json();
                     
-                    // Update current chat ID if this is a new chat
-                    if (!currentChatId) {
-                        currentChatId = data.chatid;
-                        updateChatSelector();
+                    if (!data.success) {
+                        throw new Error(data.message || "Failed to process audio");
                     }
                     
-                    // Show success message
-                    recordStatus.textContent = '';
-                    showStatus('Audio processed successfully!', 'success');
+                    // Show the processing animation while waiting for query extraction
+                    globalProcessingDiv.style.display = 'flex';
                     
-                    // Load the results after a brief delay
-                    setTimeout(loadChatResults, 1000);
+                    // Update current chat ID
+                    currentChatId = data.chatid;
+                    lastSelectedChatId = currentChatId; // Also update last selected
+                    
+                    // Start polling for query extraction and processing status
+                    if (processingPollInterval) {
+                        clearInterval(processingPollInterval);
+                    }
+                    
+                    processingPollInterval = setInterval(() => {
+                        pollForQueryExtraction(currentChatId);
+                    }, 1000);
+                    
+                    // Show success message
+                    showStatus('Audio recorded and processing started!', 'success');
                     
                 } catch (error) {
-                    recordStatus.textContent = '';
+                    // Hide global processing animation
+                    globalProcessingDiv.style.display = 'none';
+                    
                     showStatus(`Error processing audio: ${error.message}`, 'error');
                     console.error('Error processing audio:', error);
                 }
             };
+        }
+        
+        // Function to move the current query and answer to the history section
+        function moveCurrentQueryToHistory() {
+            const query = currentQueryDisplay.textContent;
+            const answer = document.getElementById('answer-content').textContent;
+            
+            if (query && answer) {
+                // Add to the history display
+                const historyItem = document.createElement('div');
+                historyItem.className = 'translation-item';
+                historyItem.innerHTML = `
+                    <div class="question-text"><strong>Question:</strong> ${query}</div>
+                    <div class="answer-text"><strong>Answer:</strong> ${answer}</div>
+                    <div class="meta">
+                        Created: ${new Date().toLocaleString()}
+                    </div>
+                `;
+                
+                // Insert at the top of the results
+                const resultsDiv = document.getElementById('results');
+                if (resultsDiv.firstChild) {
+                    resultsDiv.insertBefore(historyItem, resultsDiv.firstChild);
+                } else {
+                    resultsDiv.appendChild(historyItem);
+                }
+            }
+        }
+        
+        // Function to poll for query extraction from the ML service
+        async function pollForQueryExtraction(chatId) {
+            if (!chatId) return;
+            
+            try {
+                // Check if the ML service has extracted the query
+                const queryResponse = await fetch(`/api/query_status/${chatId}`);
+                const queryData = await queryResponse.json();
+                
+                if (queryData.success) {
+                    if (queryData.has_query) {
+                    
+                        // Query has been extracted, display it
+                        currentQueryDisplay.textContent = queryData.question;
+                        currentQueryDisplay.style.display = 'block';
+                        
+                        // Store it in our map
+                        chatInfo.set(chatId, {
+                            question: queryData.question,
+                            answer: "PROCESSING"
+                        });
+                        
+                        // Update the selector
+                        updateChatSelector();
+                        
+                        // Stop polling for query extraction and start polling for answer
+                        clearInterval(processingPollInterval);
+                        
+                        // Show a message indicating we got the query
+                        if (queryData.from_cache) {
+                            showStatus('Got your question! Generating answer...', 'success');
+                        }
+                        
+                        // Start polling for answer
+                        processingPollInterval = setInterval(() => {
+                            pollForAnswer(chatId);
+                        }, 1000);
+                    } else {
+                        // Still waiting for the ML service to extract the query
+                        // Continue polling
+                        return;
+                    }
+                }
+            } catch (error) {
+                console.error('Error polling for query extraction:', error);
+            }
+        }
+        
+        // Function to poll for answer generation
+        async function pollForAnswer(chatId) {
+            if (!chatId) return;
+            
+            try {
+                // Check if the answer is available
+                const response = await fetch(`/api/answer_status/${chatId}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Update our local data if we have a question
+                    if (data.question) {
+                        // Make sure we have the latest question in our map
+                        const currentInfo = chatInfo.get(chatId) || {};
+                        chatInfo.set(chatId, {
+                            question: data.question,
+                            answer: data.is_processing ? "PROCESSING" : (data.answer || "")
+                        });
+                        
+                        // Update chat selector if the question changed
+                        if (currentInfo.question !== data.question) {
+                            updateChatSelector();
+                        }
+                    }
+                    
+                    // If we have a complete answer, stop polling
+                    if (data.has_answer) {
+                        clearInterval(processingPollInterval);
+                        processingPollInterval = null;
+                        
+                        // Hide processing animation
+                        toggleElement('global-processing', false);
+                        
+                        // Display the answer
+                        displayAnswer('answer-content', data.answer, 'expand-current-answer');
+                    } else {
+                        // Still processing, show the processing indicator
+                        toggleElement('global-processing', true, 'Generating answer, please wait...');
+                    }
+                }
+            } catch (error) {
+                console.error('Error polling for answer:', error);
+            }
         }
         
         // Function to show status messages
@@ -280,29 +885,128 @@
         
         // Function to load chat results
         async function loadChatResults() {
-            const selectedChatId = document.getElementById('chat-id-select').value || currentChatId;
+            const selectedChatId = chatSelector.value || currentChatId;
+            
             if (!selectedChatId) return;
             
             try {
-                const response = await fetch(`/results/${selectedChatId}`);
-                const data = await response.json();
+                // If the selected chat is the current chat, display it in the middle section
+                // Otherwise, display it in the results section
+                const isCurrentChat = selectedChatId === currentChatId;
+                lastSelectedChatId = selectedChatId; // Store the selection
                 
-                document.getElementById('results').innerHTML = data
-                    .map(item => `
-                        <div class="translation-item">
-                            ${item.question ? 
-                              `<div><strong>Question:</strong> ${item.question}</div>
-                               <div><strong>Answer:</strong> ${item.answer || item.llm_response || ''}</div>` 
-                              : 
-                              `<div>${item.translated_content || ''}</div>`}
-                            <div class="meta">
-                                Created: ${new Date(item.created_at).toLocaleString()}
-                                ${item.updated_at !== item.created_at ? 
-                                  `| Updated: ${new Date(item.updated_at).toLocaleString()}` : ''}
-                            </div>
-                        </div>
-                    `)
-                    .join('');
+                // First check if we have a query
+                const queryResponse = await fetch(`/api/query_status/${selectedChatId}`);
+                const queryData = await queryResponse.json();
+                
+                if (queryData.success) {
+                    if (queryData.has_query) {
+                        // We have a query, store it
+                        const question = queryData.question;
+                        
+                        // Store the question in our map
+                        chatInfo.set(selectedChatId, {
+                            question: question,
+                            answer: "PROCESSING" // Default to processing until we check
+                        });
+                        
+                        // Now check for answer
+                        const answerResponse = await fetch(`/api/answer_status/${selectedChatId}`);
+                        const answerData = await answerResponse.json();
+                        
+                        let answer = '';
+                        let isProcessing = true;
+                        
+                        if (answerData.success) {
+                            if (answerData.has_answer) {
+                                answer = answerData.answer;
+                                isProcessing = false;
+                                
+                                // Update our local store
+                                chatInfo.set(selectedChatId, {
+                                    question: question,
+                                    answer: answer
+                                });
+                            } else if (answerData.is_processing) {
+                                answer = "PROCESSING";
+                            }
+                        }
+                        
+                        // Update the chat selector
+                        updateChatSelector();
+                        
+                        if (isCurrentChat) {
+                            // If it's the current chat, show in the middle section
+                            currentQueryDisplay.textContent = question;
+                            currentQueryDisplay.style.display = 'block';
+                            
+                            if (!isProcessing) {
+                                // Hide processing animation since we have the answer
+                                globalProcessingDiv.style.display = 'none';
+                                
+                                // Display the answer in the current answer section
+                                displayAnswer('answer-content', answer, 'expand-current-answer');
+                            } else {
+                                // Answer is being processed, show processing in global area
+                                toggleElement('global-processing', true, 'Generating answer, please wait...');
+                                
+                                // Hide the answer section since we don't have an answer yet
+                                document.getElementById('current-answer').style.display = 'none';
+                            }
+                            
+                            // Clear the results area, as we're showing in the current section
+                            document.getElementById('results').innerHTML = '';
+                        } else {
+                            // If it's not the current chat, show in the results section
+                            const resultsDiv = document.getElementById('results');
+                            
+                            // Clear the current query/answer display
+                            currentQueryDisplay.style.display = 'none';
+                            document.getElementById('current-answer').style.display = 'none';
+                            globalProcessingDiv.style.display = 'none';
+                            
+                            // Display in results section
+                            resultsDiv.innerHTML = `
+                                <div class="translation-item">
+                                    <div class="question-text"><strong>Question:</strong> ${question}</div>
+                                    ${!isProcessing ? 
+                                      `<div class="answer-text"><strong>Answer:</strong></div>
+                                       <div class="answer-content">${renderMarkdown(answer)}</div>
+                                       <button class="expand-button">Show More</button>` : 
+                                      `<div class="answer-text"><em>Processing answer...</em></div>`}
+                                    <div class="meta">
+                                        Created: ${new Date().toLocaleString()}
+                                    </div>
+                                </div>
+                            `;
+                            
+                            // Initialize code highlighting and check for expand button
+                            if (!isProcessing) {
+                                highlightCodeBlocks();
+                                
+                                const contentEl = resultsDiv.querySelector('.answer-content');
+                                const buttonEl = resultsDiv.querySelector('.expand-button');
+                                
+                                checkContentHeight(contentEl, buttonEl);
+                                
+                                // Add event listener to expand button
+                                buttonEl.addEventListener('click', function() {
+                                    toggleExpandedView(contentEl, this);
+                                });
+                            }
+                        }
+                    } else {
+                        // No query yet, show waiting state
+                        toggleElement('global-processing', true, 'Processing audio, extracting query...');
+                        
+                        // Hide the current query and answer displays
+                        currentQueryDisplay.style.display = 'none';
+                        document.getElementById('current-answer').style.display = 'none';
+                        
+                        // Clear results area since we don't have a query yet
+                        document.getElementById('results').innerHTML = '';
+                    }
+                }
             } catch (error) {
                 showStatus(`Error loading chat results: ${error.message}`, 'error');
                 console.error('Error loading chat results:', error);
@@ -315,70 +1019,272 @@
                 const response = await fetch('/results');
                 const data = await response.json();
                 
-                // Extract unique chat IDs and update selector
-                data.forEach(item => chatIds.add(item.chatid));
+                // Clear existing chat info
+                chatInfo.clear();
+                
+                // Process all chat data
+                if (data.length > 0) {
+                    // Group by chatid
+                    const chatGroups = {};
+                    data.forEach(item => {
+                        if (!chatGroups[item.chatid]) {
+                            chatGroups[item.chatid] = [];
+                        }
+                        chatGroups[item.chatid].push(item);
+                    });
+                    
+                    // Process each chat group and store the latest data
+                    for (const [chatId, items] of Object.entries(chatGroups)) {
+                        // Sort by created_at desc
+                        items.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+                        
+                        const latestItem = items[0];
+                        if (latestItem.question) {
+                            chatInfo.set(chatId, {
+                                question: latestItem.question,
+                                answer: latestItem.answer
+                            });
+                        }
+                    }
+                }
+                
+                // Update the chat selector with questions
                 updateChatSelector();
                 
-                // Display all results
-                document.getElementById('results').innerHTML = data
-                    .map(item => `
-                        <div class="translation-item">
-                            <div><strong>Chat ID:</strong> ${item.chatid}</div>
-                            ${item.question ? 
-                              `<div><strong>Question:</strong> ${item.question}</div>
-                               <div><strong>Answer:</strong> ${item.answer || item.llm_response || ''}</div>` 
-                              : 
-                              `<div>${item.translated_content || ''}</div>`}
+                // Display all completed questions in the results area
+                document.getElementById('results').innerHTML = '';
+                
+                // Display all history items in Previous Questions section
+                const historyItems = data.filter(item => item.chatid !== currentChatId && item.question);
+                
+                if (historyItems.length > 0) {
+                    const resultsDiv = document.getElementById('results');
+                    
+                    // Group items by chatid
+                    const chatGroups = {};
+                    historyItems.forEach(item => {
+                        if (!chatGroups[item.chatid]) {
+                            chatGroups[item.chatid] = item;
+                        } else if (new Date(item.updated_at) > new Date(chatGroups[item.chatid].updated_at)) {
+                            // Keep the most recently updated item
+                            chatGroups[item.chatid] = item;
+                        }
+                    });
+                    
+                    // Convert to array and sort by created_at descending
+                    const sortedItems = Object.values(chatGroups)
+                        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+                    
+                    // Render each item
+                    sortedItems.forEach(item => {
+                        const historyItem = document.createElement('div');
+                        historyItem.className = 'translation-item';
+                        historyItem.innerHTML = `
+                            <div class="question-text"><strong>Question:</strong> ${item.question}</div>
+                            ${item.answer === "PROCESSING" ?
+                              `<div class="answer-text"><em>Processing answer...</em></div>` :
+                              `<div class="answer-text"><strong>Answer:</strong></div>
+                               <div class="answer-content">${renderMarkdown(item.answer || '')}</div>
+                               <button class="expand-button">Show More</button>`
+                            }
                             <div class="meta">
                                 Created: ${new Date(item.created_at).toLocaleString()}
                                 ${item.updated_at !== item.created_at ? 
                                   `| Updated: ${new Date(item.updated_at).toLocaleString()}` : ''}
                             </div>
-                        </div>
-                    `)
-                    .join('');
+                        `;
+                        resultsDiv.appendChild(historyItem);
+                        
+                        // If we have an answer, initialize code highlighting and expand button
+                        if (item.answer !== "PROCESSING" && item.answer) {
+                            const contentEl = historyItem.querySelector('.answer-content');
+                            const buttonEl = historyItem.querySelector('.expand-button');
+                            
+                            highlightCodeBlocks();
+                            checkContentHeight(contentEl, buttonEl);
+                            
+                            // Add event listener to expand button
+                            buttonEl.addEventListener('click', function() {
+                                toggleExpandedView(contentEl, this);
+                            });
+                        }
+                    });
+                } else {
+                    document.getElementById('results').innerHTML = 
+                        '<div class="translation-item">No previous questions found.</div>';
+                }
+                
+                // If there's a current chat, display it in the middle section
+                if (currentChatId) {
+                    const currentInfo = chatInfo.get(currentChatId);
+                    if (currentInfo && currentInfo.question) {
+                        currentQueryDisplay.textContent = currentInfo.question;
+                        currentQueryDisplay.style.display = 'block';
+                        
+                        if (currentInfo.answer && currentInfo.answer !== "PROCESSING") {
+                            // We have an answer, display it
+                            displayAnswer('answer-content', currentInfo.answer, 'expand-current-answer');
+                            globalProcessingDiv.style.display = 'none';
+                        } else {
+                            // Answer is being processed
+                            document.getElementById('current-answer').style.display = 'none';
+                            toggleElement('global-processing', true, 'Generating answer, please wait...');
+                        }
+                    } else {
+                        // No query for current chat yet
+                        currentQueryDisplay.style.display = 'none';
+                        document.getElementById('current-answer').style.display = 'none';
+                    }
+                } else {
+                    // No current chat
+                    currentQueryDisplay.style.display = 'none';
+                    document.getElementById('current-answer').style.display = 'none';
+                    globalProcessingDiv.style.display = 'none';
+                }
             } catch (error) {
                 showStatus(`Error loading chats: ${error.message}`, 'error');
                 console.error('Error loading all chats:', error);
             }
         }
 
-        // Function to update the chat selector
+        // Function to update the chat selector with questions instead of IDs
         function updateChatSelector() {
-            const select = document.getElementById('chat-id-select');
+            // Save current selection
+            const currentSelection = chatSelector.value;
             
             // Clear existing options except the first one
-            while (select.options.length > 1) {
-                select.remove(1);
+            while (chatSelector.options.length > 1) {
+                chatSelector.remove(1);
             }
             
-            // Add current chat ID if it exists
-            if (currentChatId) {
-                chatIds.add(currentChatId);
-            }
-            
-            // Add all unique chat IDs
-            [...chatIds].forEach(chatId => {
+            // Add all chat entries with questions as the text
+            for (const [chatId, info] of chatInfo.entries()) {
                 const option = document.createElement('option');
                 option.value = chatId;
-                option.textContent = chatId;
-                // Select current chat ID if it exists
-                if (chatId === currentChatId) {
-                    option.selected = true;
+                
+                // Truncate question if it's too long
+                const displayText = info.question.length > 50 
+                    ? info.question.substring(0, 50) + '...' 
+                    : info.question;
+                    
+                option.textContent = displayText;
+                
+                chatSelector.appendChild(option);
+            }
+            
+            // Restore selection if it exists in the new options
+            if (currentSelection) {
+                for (let i = 0; i < chatSelector.options.length; i++) {
+                    if (chatSelector.options[i].value === currentSelection) {
+                        chatSelector.selectedIndex = i;
+                        break;
+                    }
                 }
-                select.appendChild(option);
-            });
+            } else if (currentChatId) {
+                // Select current chat ID if no previous selection
+                for (let i = 0; i < chatSelector.options.length; i++) {
+                    if (chatSelector.options[i].value === currentChatId) {
+                        chatSelector.selectedIndex = i;
+                        break;
+                    }
+                }
+            }
         }
+        
+        // Function to clear history
+        async function clearHistory() {
+            if (!confirm('Are you sure you want to clear all history? This cannot be undone.')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/clear_history', {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Clear our local cache
+                    chatInfo.clear();
+                    currentChatId = null;
+                    lastSelectedChatId = null;
+                    
+                    // Update the selector
+                    updateChatSelector();
+                    
+                    // Clear the results display
+                    document.getElementById('results').innerHTML = '';
+                    
+                    // Hide the current query and answer displays
+                    currentQueryDisplay.style.display = 'none';
+                    document.getElementById('current-answer').style.display = 'none';
+                    
+                    showStatus(`History cleared: ${data.deleted_count} records removed`, 'success');
+                } else {
+                    showStatus(`Error clearing history: ${data.message}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`Error clearing history: ${error.message}`, 'error');
+                console.error('Error clearing history:', error);
+            }
+        }
+
+        // Set handler for chat selector to prevent event bubbling issues
+        chatSelector.addEventListener('change', function(e) {
+            e.stopPropagation();
+            const selectedId = this.value;
+            if (selectedId && selectedId !== lastSelectedChatId) {
+                lastSelectedChatId = selectedId;
+                loadChatResults();
+            }
+        });
 
         // Initialize page
         window.onload = loadAllChats;
         
-        // Auto-refresh results periodically
+        // Auto-refresh results periodically only for processing items
         setInterval(() => {
-            if (currentChatId) {
-                loadChatResults();
+            const selectedChatId = chatSelector.value || currentChatId;
+            if (selectedChatId) {
+                // Only make refresh calls if we're not already polling for this chatId
+                if (!processingPollInterval) {
+                    // First check query status
+                    fetch(`/api/query_status/${selectedChatId}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                if (!data.has_query) {
+                                    // Still waiting for query, refresh the UI
+                                    toggleElement('global-processing', true, 'Processing audio, extracting query...');
+                                    return null; // Return null to stop chain
+                                } else {
+                                    // We have a query, check answer status
+                                    return fetch(`/api/answer_status/${selectedChatId}`);
+                                }
+                            }
+                            return null; // Return null to stop chain
+                        })
+                        .then(response => response ? response.json() : null)
+                        .then(data => {
+                            if (data && data.success) {
+                                if (!data.has_answer) {
+                                    // Still waiting for answer or processing, update UI to show processing state
+                                    toggleElement('global-processing', true, 'Generating answer, please wait...');
+                                    
+                                    // Refresh full results to keep everything in sync
+                                    loadChatResults();
+                                } else {
+                                    // We have the answer, hide processing and refresh results
+                                    globalProcessingDiv.style.display = 'none';
+                                    loadChatResults();
+                                }
+                            }
+                        })
+                        .catch(error => console.error('Error checking status:', error));
+                }
             }
-        }, 5000);
+        }, 2000);
         
         // Check if browser supports MediaRecorder
         if (!navigator.mediaDevices || !window.MediaRecorder) {
