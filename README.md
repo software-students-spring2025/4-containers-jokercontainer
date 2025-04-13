@@ -1,5 +1,5 @@
-![Web App Status](https://github.com/nyu-software-engineering/containerized-app-exercise/actions/workflows/lint.yml/badge.svg)
-![ML Client Status](https://github.com/nyu-software-engineering/containerized-app-exercise/actions/workflows/lint.yml/badge.svg)
+[![Web App Status](https://github.com/software-students-spring2025/4-containers-jokercontainer/actions/workflows/lint.yml/badge.svg)](https://github.com/software-students-spring2025/4-containers-jokercontainer/actions)
+[![ML Client Status](https://github.com/software-students-spring2025/4-containers-jokercontainer/actions/workflows/docker-build.yml/badge.svg)](https://github.com/software-students-spring2025/4-containers-jokercontainer/actions)
 
 # Audio Processing and Question-Answering System
 
